@@ -1,7 +1,13 @@
 import os
+import json
+import argparse
+
 from dotenv import load_dotenv
 from openai import OpenAI
-import argparse
+
+from functions.call_function import call_function
+from prompts import system_prompt
+from functions.function_schemas import available_functions
 
 load_dotenv()
 api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -14,6 +20,9 @@ args = parser.parse_args()
 
 #llm messages description list
 messages=[
+            {
+                    "role":"system",
+                    "content":system_prompt },
         {
             "role": "user",
             "content": args.user_prompt },
@@ -29,9 +38,22 @@ client = OpenAI(
 response = client.chat.completions.create(
     model="openrouter/free",
     messages=messages,
+    temperature=0,
+    tools=available_functions
 )
 
-print(response.choices[0].message.content)
+
+message = response.choices[0].message
+if message.tool_calls:
+    for tool_call in message.tool_calls:
+        result_message = call_function(tool_call, args.verbose)
+        function_args = json.loads(tool_call.function.arguments or "{}")
+        if not result_message["content"]:
+            raise Exception("should always have content")
+        if args.verbose:
+            print(f"-> {result_message['content']}")
+
+print(message.content)
 if args.verbose:    
     print("User prompt:",args.user_prompt )
     print("Prompt tokens:", response.usage.prompt_tokens)
