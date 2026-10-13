@@ -1,6 +1,7 @@
 import os
 import json
 import argparse
+import sys
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -34,26 +35,33 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key
 )
+for _ in range(20):
+    try:
+        response = client.chat.completions.create(
+            model="openrouter/free",
+            messages=messages,
+            temperature=0,
+            tools=available_functions
+        )
 
-response = client.chat.completions.create(
-    model="openrouter/free",
-    messages=messages,
-    temperature=0,
-    tools=available_functions
-)
 
+        message = response.choices[0].message
+        messages.append(message)
 
-message = response.choices[0].message
-if message.tool_calls:
-    for tool_call in message.tool_calls:
-        result_message = call_function(tool_call, args.verbose)
-        function_args = json.loads(tool_call.function.arguments or "{}")
-        if not result_message["content"]:
-            raise Exception("should always have content")
-        if args.verbose:
-            print(f"-> {result_message['content']}")
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                result_message = call_function(tool_call, args.verbose)
+                function_args = json.loads(tool_call.function.arguments or "{}")
+                if not result_message["content"]:
+                    raise Exception("should always have content")
+                if args.verbose:
+                    print(f"-> {result_message['content']}")
 
-print(message.content)
+                messages.append(result_message)
+        print(message.content)
+    except Exception as e :
+        print("Error: agent did not finish within 20 iterations", file=sys.stderr)
+        print(f"Error: {e}")
 if args.verbose:    
     print("User prompt:",args.user_prompt )
     print("Prompt tokens:", response.usage.prompt_tokens)
